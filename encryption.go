@@ -21,6 +21,7 @@
 package encryption
 
 import (
+	"fmt"
 	"time"
 
 	"go.pitz.tech/gorm/encryption/aes"
@@ -41,6 +42,8 @@ type config struct {
 	key              []byte
 	rotationDuration time.Duration
 	migrate          bool
+	marshaler        func(any) ([]byte, error)
+	unmarshaler      func([]byte, any) error
 }
 
 // Option provides a common definition on how to configure optional parameters of the underlying configuration.
@@ -67,11 +70,21 @@ func WithMigration() Option {
 	}
 }
 
+// WithMarshaling provides consumers with the ability to marshal/unmarshal structures for encryption.
+func WithMarshaling(marshaler func(any) ([]byte, error), unmarshaler func([]byte, any) error) Option {
+	return func(cfg *config) {
+		cfg.marshaler = marshaler
+		cfg.unmarshaler = unmarshaler
+	}
+}
+
 // Register enables the aes and aes-gcm serializers for the underlying Gorm database. A reference to the database is
 // needed for the aes-gcm implementation to store and read keys.
 func Register(db *gorm.DB, opts ...Option) error {
 	cfg := &config{
 		rotationDuration: 10 * 24 * time.Hour,
+		marshaler:        noMarshaler,
+		unmarshaler:      noUnmarshaler,
 	}
 
 	for _, opt := range opts {
@@ -87,7 +100,7 @@ func Register(db *gorm.DB, opts ...Option) error {
 		}
 	}
 
-	serializer, err := aesgcm.New(db, cfg.key, cfg.rotationDuration)
+	serializer, err := aesgcm.New(db, cfg.key, cfg.rotationDuration, cfg.marshaler, cfg.unmarshaler)
 	if err != nil {
 		return err
 	}
@@ -95,4 +108,14 @@ func Register(db *gorm.DB, opts ...Option) error {
 	schema.RegisterSerializer(internal.AES_GCM.Name, serializer)
 
 	return nil
+}
+
+var ErrMarshaling = fmt.Errorf("marshaling not supported. you must set a marshaler and unmarshaler to enable")
+
+func noMarshaler(any) ([]byte, error) {
+	return nil, ErrMarshaling
+}
+
+func noUnmarshaler([]byte, any) error {
+	return ErrMarshaling
 }

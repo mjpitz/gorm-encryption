@@ -21,10 +21,10 @@
 package encryption_test
 
 import (
+	"github.com/matryer/is"
 	"testing"
 
 	"github.com/glebarez/sqlite"
-	"github.com/stretchr/testify/require"
 	"go.pitz.tech/gorm/encryption"
 	"gorm.io/gorm"
 )
@@ -35,36 +35,38 @@ type testAESRecord struct {
 }
 
 func TestAES(t *testing.T) {
+	is := is.New(t)
+
 	// setup aes key and GORM serializer
 
 	key, err := encryption.GenerateKey()
-	require.NoError(t, err)
+	is.NoErr(err)
 
 	// setup in-memory database
 	db, err := gorm.Open(sqlite.Open("file::memory:?cache=shared"))
-	require.NoError(t, err)
+	is.NoErr(err)
 
 	// register after opening the db to ensure this functionality works
 
 	err = encryption.Register(db, encryption.WithKey(key), encryption.WithMigration())
-	require.NoError(t, err)
+	is.NoErr(err)
 
 	// migrate schema
 
 	err = db.AutoMigrate(testAESRecord{})
-	require.NoError(t, err)
+	is.NoErr(err)
 
 	// test encryption and decryption
 
 	expected, err := encryption.GenerateKey()
-	require.NoError(t, err)
+	is.NoErr(err)
 
 	err = db.Create(&testAESRecord{Key: expected}).Error
-	require.NoError(t, err)
+	is.NoErr(err)
 
 	decoded := &testAESRecord{}
 	err = db.First(decoded).Error
-	require.NoError(t, err)
+	is.NoErr(err)
 
-	require.Equal(t, expected, decoded.Key)
+	is.Equal(expected, decoded.Key)
 }

@@ -21,49 +21,102 @@
 package encryption_test
 
 import (
+	"encoding/base64"
+	"encoding/json"
+	"github.com/matryer/is"
 	"testing"
 
 	"github.com/glebarez/sqlite"
-	"github.com/stretchr/testify/require"
 	"go.pitz.tech/gorm/encryption"
 	"gorm.io/gorm"
 )
 
+type TypesAESGCM struct {
+	Bytes  []byte `gorm:"type:varbinary;serializer:aes-gcm"`
+	String string `gorm:"type:varbinary;serializer:aes-gcm"`
+
+	Int   int   `gorm:"type:varbinary;serializer:aes-gcm"`
+	Int8  int8  `gorm:"type:varbinary;serializer:aes-gcm"`
+	Int16 int16 `gorm:"type:varbinary;serializer:aes-gcm"`
+	Int32 int32 `gorm:"type:varbinary;serializer:aes-gcm"`
+	Int64 int64 `gorm:"type:varbinary;serializer:aes-gcm"`
+
+	Uint   uint   `gorm:"type:varbinary;serializer:aes-gcm"`
+	Uint8  uint8  `gorm:"type:varbinary;serializer:aes-gcm"`
+	Uint16 uint16 `gorm:"type:varbinary;serializer:aes-gcm"`
+	Uint32 uint32 `gorm:"type:varbinary;serializer:aes-gcm"`
+	Uint64 uint64 `gorm:"type:varbinary;serializer:aes-gcm"`
+
+	Float32 float32 `gorm:"type:varbinary;serializer:aes-gcm"`
+	Float64 float64 `gorm:"type:varbinary;serializer:aes-gcm"`
+}
+
 type testAESGCMRecord struct {
-	ID  int    `gorm:"primaryKey;autoIncrement"`
-	Key []byte `gorm:"serializer:aes-gcm"`
+	ID int `gorm:"primaryKey;autoIncrement"`
+
+	TypesAESGCM
+	Struct TypesAESGCM `gorm:"type:varbinary;serializer:aes-gcm"`
 }
 
 func TestAESGCM(t *testing.T) {
+	is := is.New(t)
+
 	// setup aes key and GORM serializer
 
 	key, err := encryption.GenerateKey()
-	require.NoError(t, err)
+	is.NoErr(err)
 
 	// setup in-memory database
 	db, err := gorm.Open(sqlite.Open("file::memory:?cache=shared"))
-	require.NoError(t, err)
+	is.NoErr(err)
 
 	// setup encryption
-	err = encryption.Register(db, encryption.WithKey(key), encryption.WithMigration())
-	require.NoError(t, err)
+	err = encryption.Register(db,
+		encryption.WithKey(key),
+		encryption.WithMigration(),
+		encryption.WithMarshaling(json.Marshal, json.Unmarshal),
+	)
+	is.NoErr(err)
 
 	// migrate core schema
 
 	err = db.AutoMigrate(testAESGCMRecord{})
-	require.NoError(t, err)
+	is.NoErr(err)
 
 	// test encryption and decryption
 
-	expected, err := encryption.GenerateKey()
-	require.NoError(t, err)
+	random, err := encryption.GenerateKey()
+	is.NoErr(err)
 
-	err = db.Create(&testAESGCMRecord{Key: expected}).Error
-	require.NoError(t, err)
+	expected := TypesAESGCM{
+		Bytes:  random,
+		String: base64.StdEncoding.EncodeToString(random),
+		Int:    127,
+		Int8:   127,
+		Int16:  127,
+		Int32:  127,
+		Int64:  127,
+
+		Uint:   127,
+		Uint8:  127,
+		Uint16: 127,
+		Uint32: 127,
+		Uint64: 127,
+
+		Float32: 127,
+		Float64: 127,
+	}
+
+	err = db.Create(&testAESGCMRecord{
+		TypesAESGCM: expected,
+		Struct:      expected,
+	}).Error
+	is.NoErr(err)
 
 	decoded := &testAESGCMRecord{}
 	err = db.First(decoded).Error
-	require.NoError(t, err)
+	is.NoErr(err)
 
-	require.Equal(t, expected, decoded.Key)
+	is.Equal(expected, decoded.TypesAESGCM)
+	is.Equal(expected, decoded.Struct)
 }

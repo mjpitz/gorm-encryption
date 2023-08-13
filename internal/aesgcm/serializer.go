@@ -38,7 +38,7 @@ import (
 	"gorm.io/gorm/schema"
 )
 
-func New(db *gorm.DB, hmac []byte, rotationDuration time.Duration) (*Serializer, error) {
+func New(db *gorm.DB, hmac []byte, rotationDuration time.Duration, marshaler func(any) ([]byte, error), unmarshaler func([]byte, any) error) (*Serializer, error) {
 	hmacKey := sha256.Sum256(hmac)
 
 	serializer := &Serializer{
@@ -47,6 +47,8 @@ func New(db *gorm.DB, hmac []byte, rotationDuration time.Duration) (*Serializer,
 		current:          make(chan *database.Key, 1),
 		rotationDuration: rotationDuration,
 		rotate:           time.NewTicker(rotationDuration),
+		marshaler:        marshaler,
+		unmarshaler:      unmarshaler,
 	}
 
 	{
@@ -82,6 +84,9 @@ type Serializer struct {
 
 	rotationDuration time.Duration
 	rotate           *time.Ticker
+
+	marshaler   func(any) ([]byte, error)
+	unmarshaler func([]byte, any) error
 }
 
 func (s *Serializer) newKey() (*database.Key, error) {
@@ -178,16 +183,36 @@ func (s *Serializer) Scan(ctx context.Context, field *schema.Field, dst reflect.
 		return err
 	}
 
-	field.ReflectValueOf(ctx, dst).SetBytes(plaintext)
+	v := field.ReflectValueOf(ctx, dst)
+
+	if v.Kind() == reflect.Slice && v.Type().Elem().Kind() == reflect.Uint8 {
+		v.SetBytes(plaintext)
+	} else {
+		val := reflect.New(field.FieldType)
+		err = s.unmarshaler(plaintext, val.Interface())
+		if err != nil {
+			return err
+		}
+
+		v.Set(val.Elem())
+	}
 
 	return nil
 }
 
 // Value converts a plaintext, in-memory field value into an encrypted field value intended for storage in SQL systems.
 func (s *Serializer) Value(ctx context.Context, field *schema.Field, dst reflect.Value, fieldValue interface{}) (interface{}, error) {
-	plaintext, ok := fieldValue.([]byte)
-	if !ok {
-		return nil, fmt.Errorf("encryption only works on []byte data")
+	var plaintext []byte
+	var err error
+
+	switch v := fieldValue.(type) {
+	case []byte:
+		plaintext = v
+	default:
+		plaintext, err = s.marshaler(v)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	key := s.currentKey()
