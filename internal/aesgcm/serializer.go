@@ -32,19 +32,21 @@ import (
 	"reflect"
 	"time"
 
+	"github.com/hashicorp/golang-lru/v2/expirable"
 	"go.pitz.tech/gorm/encryption/database"
 	"go.pitz.tech/gorm/encryption/internal"
 	"gorm.io/gorm"
 	"gorm.io/gorm/schema"
 )
 
-func New(db *gorm.DB, hmac []byte, rotationDuration time.Duration, marshaler func(any) ([]byte, error), unmarshaler func([]byte, any) error) (*Serializer, error) {
+func New(db *gorm.DB, hmac []byte, cacheSize int, cacheDuration time.Duration, rotationDuration time.Duration, marshaler func(any) ([]byte, error), unmarshaler func([]byte, any) error) (*Serializer, error) {
 	hmacKey := sha256.Sum256(hmac)
 
 	serializer := &Serializer{
 		db:               db,
 		hmacKey:          hmacKey[:],
 		current:          make(chan *database.Key, 1),
+		cache:            expirable.NewLRU[string, *database.Key](cacheSize, nil, cacheDuration),
 		rotationDuration: rotationDuration,
 		rotate:           time.NewTicker(rotationDuration),
 		marshaler:        marshaler,
@@ -81,6 +83,7 @@ type Serializer struct {
 
 	hmacKey []byte
 	current chan *database.Key
+	cache   *expirable.LRU[string, *database.Key]
 
 	rotationDuration time.Duration
 	rotate           *time.Ticker
@@ -132,11 +135,19 @@ func (s *Serializer) currentKey() *database.Key {
 // Get implements groupcache loading logic that pulls encryption keys from the database and caches them in memory to
 // improve performance of decrypting field values.
 func (s *Serializer) Get(fingerprint string) (*database.Key, error) {
-	dataKey := &database.Key{}
+	dataKey, ok := s.cache.Get(fingerprint)
+	if !ok {
+		dataKey = &database.Key{}
 
-	err := s.db.First(dataKey, "fingerprint = ?", fingerprint).Error
+		err := s.db.First(dataKey, "fingerprint = ?", fingerprint).Error
+		if err != nil {
+			return nil, err
+		}
 
-	return dataKey, err
+		s.cache.Add(fingerprint, dataKey)
+	}
+
+	return dataKey, nil
 }
 
 // Scan converts on-disk, ciphertext into a plaintext in-memory field value.

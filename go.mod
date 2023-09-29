@@ -4,6 +4,7 @@ go 1.19
 
 require (
 	github.com/glebarez/sqlite v1.8.0
+	github.com/hashicorp/golang-lru/v2 v2.0.6
 	github.com/matryer/is v1.4.1
 	gorm.io/gorm v1.25.1
 )

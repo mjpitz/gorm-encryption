@@ -40,6 +40,8 @@ func GenerateKey() ([]byte, error) {
 
 type config struct {
 	key              []byte
+	cacheSize        int
+	cacheDuration    time.Duration
 	rotationDuration time.Duration
 	migrate          bool
 	marshaler        func(any) ([]byte, error)
@@ -53,6 +55,20 @@ type Option func(cfg *config)
 func WithKey(key []byte) Option {
 	return func(cfg *config) {
 		cfg.key = key[:]
+	}
+}
+
+// WithCacheSize configures how many data keys are cached in memory before an entry is evicted.
+func WithCacheSize(cacheSize int) Option {
+	return func(cfg *config) {
+		cfg.cacheSize = cacheSize
+	}
+}
+
+// WithCacheDuration configures how long data keys are cached for before they're evicted.
+func WithCacheDuration(cacheDuration time.Duration) Option {
+	return func(cfg *config) {
+		cfg.cacheDuration = cacheDuration
 	}
 }
 
@@ -82,6 +98,8 @@ func WithMarshaling(marshaler func(any) ([]byte, error), unmarshaler func([]byte
 // needed for the aes-gcm implementation to store and read keys.
 func Register(db *gorm.DB, opts ...Option) error {
 	cfg := &config{
+		cacheSize:        5,
+		cacheDuration:    5 * time.Minute,
 		rotationDuration: 10 * 24 * time.Hour,
 		marshaler:        noMarshaler,
 		unmarshaler:      noUnmarshaler,
@@ -100,7 +118,7 @@ func Register(db *gorm.DB, opts ...Option) error {
 		}
 	}
 
-	serializer, err := aesgcm.New(db, cfg.key, cfg.rotationDuration, cfg.marshaler, cfg.unmarshaler)
+	serializer, err := aesgcm.New(db, cfg.key, cfg.cacheSize, cfg.cacheDuration, cfg.rotationDuration, cfg.marshaler, cfg.unmarshaler)
 	if err != nil {
 		return err
 	}
