@@ -132,8 +132,8 @@ func (s *Serializer) currentKey() *database.Key {
 	}
 }
 
-// Get implements groupcache loading logic that pulls encryption keys from the database and caches them in memory to
-// improve performance of decrypting field values.
+// Get implements loading logic that pulls encryption keys from the database and caches them in memory to improve
+// performance of decrypting field values.
 func (s *Serializer) Get(fingerprint string) (*database.Key, error) {
 	dataKey, ok := s.cache.Get(fingerprint)
 	if !ok {

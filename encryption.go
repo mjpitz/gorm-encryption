@@ -38,87 +38,131 @@ func GenerateKey() ([]byte, error) {
 	return internal.GenerateKey()
 }
 
-type config struct {
-	key              []byte
-	cacheSize        int
-	cacheDuration    time.Duration
-	rotationDuration time.Duration
-	migrate          bool
-	marshaler        func(any) ([]byte, error)
-	unmarshaler      func([]byte, any) error
+// Config provides a simplified structure for managing encryption configuration.
+type Config struct {
+	Key              []byte
+	CacheSize        int
+	CacheDuration    time.Duration
+	RotationDuration time.Duration
+	Migrate          bool
+	Marshaler        func(any) ([]byte, error)
+	Unmarshaler      func([]byte, any) error
+}
+
+// Apply this configuration to the provided configuration.
+func (c Config) Apply(cfg *Config) {
+	if c.Key != nil {
+		cfg.Key = c.Key
+	}
+
+	if c.CacheSize > 0 {
+		cfg.CacheSize = c.CacheSize
+	}
+
+	if c.CacheDuration > 0 {
+		cfg.CacheDuration = c.CacheDuration
+	}
+
+	if c.RotationDuration > 0 {
+		cfg.RotationDuration = c.RotationDuration
+	}
+
+	if c.Migrate {
+		cfg.Migrate = c.Migrate
+	}
+
+	if c.Marshaler != nil {
+		cfg.Marshaler = c.Marshaler
+	}
+
+	if c.Unmarshaler != nil {
+		cfg.Unmarshaler = c.Unmarshaler
+	}
+}
+
+// OptionFunc provides a legacy stepping stone to the new configuration.
+type OptionFunc func(cfg *Config)
+
+// Apply runs the underlying function provided it's not-nil.
+func (fn OptionFunc) Apply(cfg *Config) {
+	if fn != nil {
+		fn(cfg)
+	}
 }
 
 // Option provides a common definition on how to configure optional parameters of the underlying configuration.
-type Option func(cfg *config)
+type Option interface {
+	Apply(cfg *Config)
+}
 
 // WithKey configures the root encryption key to use.
 func WithKey(key []byte) Option {
-	return func(cfg *config) {
-		cfg.key = key[:]
-	}
+	return OptionFunc(func(cfg *Config) {
+		cfg.Key = key[:]
+	})
 }
 
 // WithCacheSize configures how many data keys are cached in memory before an entry is evicted.
 func WithCacheSize(cacheSize int) Option {
-	return func(cfg *config) {
-		cfg.cacheSize = cacheSize
-	}
+	return OptionFunc(func(cfg *Config) {
+		cfg.CacheSize = cacheSize
+	})
 }
 
 // WithCacheDuration configures how long data keys are cached for before they're evicted.
 func WithCacheDuration(cacheDuration time.Duration) Option {
-	return func(cfg *config) {
-		cfg.cacheDuration = cacheDuration
-	}
+	return OptionFunc(func(cfg *Config) {
+		cfg.CacheDuration = cacheDuration
+	})
 }
 
 // WithRotationDuration configures how long the underlying data encryption keys are valid for.
 func WithRotationDuration(rotationDuration time.Duration) Option {
-	return func(cfg *config) {
-		cfg.rotationDuration = rotationDuration
-	}
+	return OptionFunc(func(cfg *Config) {
+		cfg.RotationDuration = rotationDuration
+	})
 }
 
 // WithMigration will automatically migrate the underlying encryption_keys schema.
 func WithMigration() Option {
-	return func(cfg *config) {
-		cfg.migrate = true
-	}
+	return OptionFunc(func(cfg *Config) {
+		cfg.Migrate = true
+	})
 }
 
 // WithMarshaling provides consumers with the ability to marshal/unmarshal structures for encryption.
 func WithMarshaling(marshaler func(any) ([]byte, error), unmarshaler func([]byte, any) error) Option {
-	return func(cfg *config) {
-		cfg.marshaler = marshaler
-		cfg.unmarshaler = unmarshaler
-	}
+	return OptionFunc(func(cfg *Config) {
+		cfg.Marshaler = marshaler
+		cfg.Unmarshaler = unmarshaler
+	})
 }
 
 // Register enables the aes and aes-gcm serializers for the underlying Gorm database. A reference to the database is
 // needed for the aes-gcm implementation to store and read keys.
 func Register(db *gorm.DB, opts ...Option) error {
-	cfg := &config{
-		cacheSize:        5,
-		cacheDuration:    5 * time.Minute,
-		rotationDuration: 10 * 24 * time.Hour,
-		marshaler:        noMarshaler,
-		unmarshaler:      noUnmarshaler,
+	cfg := &Config{
+		CacheSize:        5,
+		CacheDuration:    5 * time.Minute,
+		RotationDuration: 10 * 24 * time.Hour,
+		Marshaler:        noMarshaler,
+		Unmarshaler:      noUnmarshaler,
 	}
 
 	for _, opt := range opts {
-		opt(cfg)
+		opt.Apply(cfg)
 	}
 
-	schema.RegisterSerializer(internal.AES.Name, aes.New(cfg.key))
+	schema.RegisterSerializer(internal.AES.Name, aes.New(cfg.Key))
 
-	if cfg.migrate {
+	if cfg.Migrate {
 		err := db.AutoMigrate(database.Key{})
 		if err != nil {
 			return err
 		}
 	}
 
-	serializer, err := aesgcm.New(db, cfg.key, cfg.cacheSize, cfg.cacheDuration, cfg.rotationDuration, cfg.marshaler, cfg.unmarshaler)
+	serializer, err := aesgcm.New(db, cfg.Key, cfg.CacheSize, cfg.CacheDuration, cfg.RotationDuration, cfg.Marshaler, cfg.Unmarshaler)
 	if err != nil {
 		return err
 	}
