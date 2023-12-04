@@ -6,21 +6,30 @@ Easily encrypt data at rest in relational databases using drop-in Gorm Serialize
 
 This library draws inspiration from how SOPS handles encrypting fields in a simple configuration file as well as how
 BadgerDB implements its encryption key management behind the scenes. When a `[]byte` field is encrypted using this
-library, it's formatted as follows: `ENC:algorithm,fingerprint,ciphertext`. The `algorithm` is a single byte 
-representing `aes` (1) or `aes-gcm` (2). This indicates which serializer was used when storing the fields in the 
-database. `fingerprint` identifies which encryption key was used to encrypt the field. This can allow multiple to be 
-chained together in order to handle multiple keys or even migrations (TBD). Finally, the `ciphertext` block is the 
+library, it's formatted as follows: `ENC:algorithm,fingerprint,ciphertext`. The `algorithm` is a single byte
+representing `aes` (1) or `aes-gcm` (2). This indicates which serializer was used when storing the fields in the
+database. `fingerprint` identifies which encryption key was used to encrypt the field. This can allow multiple to be
+chained together in order to handle multiple keys or even migrations (TBD). Finally, the `ciphertext` block is the
 encrypted value.
 
-The `aes` serializer uses direct key encryption. It is recommended that the `aes` serializer not be used to encrypt 
+The `aes` serializer uses direct key encryption. It is recommended that the `aes` serializer not be used to encrypt
 values that may be repeated. This is because the `aes` serializer does not factor a unique seed in with each entry.
 Instead, it's expected that the values being encrypted are unique (for example, other encryption keys).
 
 The `aes-gcm` serializer uses intermediary keys that are stored in the `encryption_keys` table to encrypt data across
-the entire database. Unlike the `aes` serializer, the `aes-gcm` serializers is safe to use on values that may be 
-repeated. The key itself is encrypted using the `aes` serializer, making it easy to rotate the root key without needing 
-to read, decrypt, and re-encrypt every field in the database. This makes rotations quick and strongly protects the core 
+the entire database. Unlike the `aes` serializer, the `aes-gcm` serializers is safe to use on values that may be
+repeated. The key itself is encrypted using the `aes` serializer, making it easy to rotate the root key without needing
+to read, decrypt, and re-encrypt every field in the database. This makes rotations quick and strongly protects the core
 encryption keys from attackers.
+
+## Support
+
+| Driver                     | Supported | Notes                                              |
+|----------------------------|-----------|----------------------------------------------------|
+| github.com/glebarez/sqlite | ✅         | Support since day one.                             |
+| gorm.io/driver/postgres    | ✅         | -                                                  |
+| gorm.io/driver/mysql       | ❌         | https://github.com/mjpitz/gorm-encryption/issues/3 |
+| gorm.io/driver/sqlserver   | ✅         | -                                                  |
 
 ## Usage
 
@@ -37,14 +46,14 @@ library only supports using the `aes` and `aes-gcm` serializers on `[]byte` fiel
 package main
 
 type Model struct {
-	UniqueValue []byte `gorm:"...;serializer:aes"`
+	UniqueValue    []byte `gorm:"...;serializer:aes"`
 	NonUniqueValue []byte `gorm:"...;serializer:aes-gcm"`
 }
 ```
 
 **A few notes...**
 
-First, when using fixed size `[]byte` fields, you'll need to consider the length added by the additional metadata of the 
+First, when using fixed size `[]byte` fields, you'll need to consider the length added by the additional metadata of the
 encrypted fields. The equations below roughly communicate how much additional length will be needed.
 
 * `aes = data length + 50`
@@ -76,17 +85,17 @@ import (
 
 func migrate(encryptionKey []byte) error {
 	var dialector gorm.Dialector
-	
+
 	db, err := gorm.Open(dialector, nil)
 	if err != nil {
 		return err
 	}
-	
+
 	err = encryption.Register(db, encryption.WithKey(encryptionKey), encryption.WithMigration())
 	if err != nil {
 		return err
 	}
-	
+
 	return db.AutoMigrate(
 		// your application models...
 	)
@@ -105,7 +114,7 @@ import (
 
 func run(encryptionKey []byte) error {
 	var dialector gorm.Dialector
-	
+
 	db, err := gorm.Open(dialector, nil)
 	if err != nil {
 		return err
@@ -115,9 +124,9 @@ func run(encryptionKey []byte) error {
 	if err != nil {
 		return err
 	}
-	
+
 	// your business logic
-	
+
 	return nil
 }
 ```
@@ -137,7 +146,7 @@ import (
 func run(customKey []byte) error {
 	schema.RegisterSerializer("custom-aes", aes.New(customKey))
 	// now you have `serializer:custom-aes`
-	
+
 	var dialector gorm.Dialector
 
 	db, err := gorm.Open(dialector, nil)
@@ -200,7 +209,7 @@ func rotate(oldKey, newKey []byte) error {
 				return err
 			}
 		}
-		
+
 		return nil
 	})
 }
