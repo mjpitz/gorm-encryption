@@ -1,0 +1,38 @@
+version: "3.8"
+
+services:
+  postgres:
+    image: postgres:latest
+    restart: always
+    environment:
+      POSTGRES_USER: gorm
+      POSTGRES_PASSWORD: gorm
+      POSTGRES_DB: gormdb
+    ports:
+      - 5432:5432
+
+  mysql:
+    image: mysql:latest
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_USER: gorm
+      MYSQL_PASSWORD: gorm
+      MYSQL_DATABASE: gormdb
+    ports:
+      - 3306:3306
+
+  sqlserver:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    restart: always
+    environment:
+      ACCEPT_EULA: y
+      MSSQL_SA_PASSWORD: yourStrong(!)Password
+      MSSQL_PID: Developer
+    ports:
+      - 1433:1433
+
+  adminer:
+    image: adminer:latest
+    ports:
+      - 8080:8080

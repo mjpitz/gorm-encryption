@@ -12,9 +12,21 @@ export HELP_TEXT
 help:
 	@echo "$$HELP_TEXT"
 
+deps:
+	go mod download
+	cd integration && go mod download
+
+deps/upgrade:
+	go get -u ./...
+	cd integration && go get -u ./...
+
+deps/tidy:
+	go mod tidy
+	cd integration && go mod tidy
+
 test:
-	go test -v -race -coverprofile=.coverprofile -covermode=atomic ./...
+	@bash ./scripts/test.sh
 
 legal: .legal
 .legal:
-	git ls-files | xargs -I{} addlicense -f ./LICENSE -skip yaml -skip yml {}
+	@git ls-files | xargs -I{} addlicense -f ./legal/header.txt -skip yaml -skip yml {}

@@ -18,55 +18,25 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE
 // OR OTHER DEALINGS IN THE SOFTWARE.
 
-package encryption_test
+package integration_test
 
 import (
-	"github.com/matryer/is"
 	"testing"
 
+	"github.com/matryer/is"
+
 	"github.com/glebarez/sqlite"
-	"go.pitz.tech/gorm/encryption"
 	"gorm.io/gorm"
 )
 
-type testAESRecord struct {
-	ID  int    `gorm:"primaryKey;autoIncrement"`
-	Key []byte `gorm:"serializer:aes"`
-}
+func TestSQLite(t *testing.T) {
+	t.Parallel()
 
-func TestAES(t *testing.T) {
 	is := is.New(t)
-
-	// setup aes key and GORM serializer
-
-	key, err := encryption.GenerateKey()
-	is.NoErr(err)
 
 	// setup in-memory database
 	db, err := gorm.Open(sqlite.Open("file::memory:?cache=shared"))
 	is.NoErr(err)
 
-	// register after opening the db to ensure this functionality works
-
-	err = encryption.Register(db, encryption.WithKey(key), encryption.WithMigration())
-	is.NoErr(err)
-
-	// migrate schema
-
-	err = db.AutoMigrate(testAESRecord{})
-	is.NoErr(err)
-
-	// test encryption and decryption
-
-	expected, err := encryption.GenerateKey()
-	is.NoErr(err)
-
-	err = db.Create(&testAESRecord{Key: expected}).Error
-	is.NoErr(err)
-
-	decoded := &testAESRecord{}
-	err = db.First(decoded).Error
-	is.NoErr(err)
-
-	is.Equal(expected, decoded.Key)
+	test(is, db)
 }
