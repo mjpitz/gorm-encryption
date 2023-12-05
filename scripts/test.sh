@@ -11,4 +11,7 @@ echo "waiting for containers"
 sleep 30
 
 echo "running tests"
-go test -v -race ./...
+go test -v -race -covermode=atomic \
+  -coverprofile=../coverage.integration.txt \
+  -coverpkg=go.pitz.tech/gorm/encryption/... \
+  ./...

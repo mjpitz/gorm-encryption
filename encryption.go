@@ -24,12 +24,13 @@ import (
 	"fmt"
 	"time"
 
+	"gorm.io/gorm"
+	"gorm.io/gorm/schema"
+
 	"go.pitz.tech/gorm/encryption/aes"
 	"go.pitz.tech/gorm/encryption/database"
 	"go.pitz.tech/gorm/encryption/internal"
 	"go.pitz.tech/gorm/encryption/internal/aesgcm"
-	"gorm.io/gorm"
-	"gorm.io/gorm/schema"
 )
 
 // GenerateKey produces a 256bit cryptographically secure random value. This can be used as a primary key for
@@ -145,8 +146,8 @@ func Register(db *gorm.DB, opts ...Option) error {
 		CacheSize:        5,
 		CacheDuration:    5 * time.Minute,
 		RotationDuration: 10 * 24 * time.Hour,
-		Marshaler:        noMarshaler,
-		Unmarshaler:      noUnmarshaler,
+		Marshaler:        NoMarshaler,
+		Unmarshaler:      NoUnmarshaler,
 	}
 
 	for _, opt := range opts {
@@ -172,12 +173,15 @@ func Register(db *gorm.DB, opts ...Option) error {
 	return nil
 }
 
+// ErrMarshaling is returned when no marshaler or unmarshaler are specified for the config.
 var ErrMarshaling = fmt.Errorf("marshaling not supported. you must set a marshaler and unmarshaler to enable")
 
-func noMarshaler(any) ([]byte, error) {
+// NoMarshaler is the default implementation for custom structures. It returns an error when called.
+func NoMarshaler(any) ([]byte, error) {
 	return nil, ErrMarshaling
 }
 
-func noUnmarshaler([]byte, any) error {
+// NoUnmarshaler is the default implementation for custom structures. It returns an error when called.
+func NoUnmarshaler([]byte, any) error {
 	return ErrMarshaling
 }

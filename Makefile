@@ -25,6 +25,7 @@ deps/tidy:
 	cd integration && go mod tidy
 
 test:
+	@go test -v -race -covermode=atomic -coverprofile=coverage.unit.txt -coverpkg=./... ./...
 	@bash ./scripts/test.sh
 
 legal: .legal
